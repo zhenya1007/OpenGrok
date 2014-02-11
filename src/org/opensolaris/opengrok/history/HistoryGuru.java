@@ -34,7 +34,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -126,18 +125,18 @@ public final class HistoryGuru {
     public Annotation annotate(File file, String rev) throws IOException {
         Annotation ret = null;
 
-        Repository repos = getRepository(file);
-        if (repos != null) {
-            ret = repos.annotate(file, rev);
+        Repository repo = getRepository(file);
+        if (repo != null) {
+            ret = repo.annotate(file, rev);
             History hist = null;
             try {
-                hist = repos.getHistory(file);
+                hist = repo.getHistory(file);
             } catch (HistoryException ex) {
                 Logger.getLogger(HistoryGuru.class.getName()).log(Level.FINEST,
                     "Cannot get messages for tooltip: ", ex);
             }
             if (hist != null && ret != null) {
-             Set<String> revs=ret.getRevisions();
+             Set<String> revs = ret.getRevisions();
              // !!! cannot do this because of not matching rev ids (keys)
              // first is the most recent one, so we need the position of "rev"
              // until the end of the list
@@ -145,15 +144,12 @@ public final class HistoryGuru {
              //     hent = hent.subList(hent.indexOf(rev), hent.size());
              //}
              for (HistoryEntry he : hist.getHistoryEntries()) {
-                String cmr=he.getRevision();
-                //TODO this is only for mercurial, for other SCMs it might also
-                // be a problem, we need to revise how we shorten the rev # for
-                // annotate
-                String[] brev=cmr.split(":");
-                if (revs.contains(brev[0])) {
-                    ret.addDesc(brev[0], "changeset: "+he.getRevision()
-                        +"\nsummary: "+he.getMessage()+"\nuser: "
-                        +he.getAuthor()+"\ndate: "+he.getDate());
+                String hist_rev = he.getRevision();
+                String short_rev = repo.getRevisionForAnnotate(hist_rev);
+                if (revs.contains(short_rev)) {
+                    ret.addDesc(short_rev, "changeset: " + he.getRevision() +
+                        "\nsummary: " + he.getMessage() + "\nuser: " +
+                        he.getAuthor() + "\ndate: " + he.getDate());
                 }
              }
             }
@@ -306,6 +302,15 @@ public final class HistoryGuru {
             IgnoredNames ignoredNames, boolean recursiveSearch, int depth) {
         for (File file : files) {
             Repository repository = null;
+            if (file.getName().equals(".opengrok_skip_history")) {
+                log.log(Level.INFO, "Skipping history cache creation for "
+                        + file.getParentFile().getAbsolutePath()
+                        + " and it's subdirectories");
+                return;
+            }
+        }
+        for (File file : files) {
+            Repository repository = null;
             try {
                 repository = RepositoryFactory.getRepository(file);
             } catch (InstantiationException ie) {
@@ -450,6 +455,7 @@ public final class HistoryGuru {
 
     private void createCache(Repository repository, String sinceRevision) {
         if (!useCache()) {
+            repository.setHistoryIndexDone();
             return;
         }
 
@@ -482,38 +488,41 @@ public final class HistoryGuru {
             log.log(Level.WARNING, "Skipping creation of historycache of "
                 + type + " repository in " + path + ": Missing SCM dependencies?");
         }
+        
+        /*
+         * need to do this for all repos since createCacheReal() will be
+         * waiting for all repos to finish.
+         */
+        repository.setHistoryIndexDone();
     }
 
     private void createCacheReal(Collection<Repository> repositories) {
-        int num = Runtime.getRuntime().availableProcessors() * 2;
-        String total = System.getProperty("org.opensolaris.opengrok.history.NumCacheThreads");
-        if (total != null) {
-            try {
-                num = Integer.valueOf(total);
-            } catch (Throwable t) {
-                log.log(Level.WARNING, "Failed to parse the number of cache threads to use for cache creation", t);
-            }
-        }
-        ExecutorService executor = Executors.newFixedThreadPool(num);
+        ExecutorService executor = RuntimeEnvironment.getHistoryExecutor();
 
-        for (final Repository repos : repositories) {
+        for (final Repository repo : repositories) {
             final String latestRev;
+            repo.zeroHistoryIndexDone();
             try {
-                latestRev = historyCache.getLatestCachedRevision(repos);
+                latestRev = historyCache.getLatestCachedRevision(repo);
             } catch (HistoryException he) {
                 log.log(Level.WARNING,
                         String.format(
                         "Failed to retrieve latest cached revision for %s",
-                        repos.getDirectoryName()), he);
+                        repo.getDirectoryName()), he);
                 continue;
             }
             executor.submit(new Runnable() {
                 @Override
                 public void run() {
-                    createCache(repos, latestRev);
+                    createCache(repo, latestRev);
                 }
             });
         }
+
+        for (final Repository repo : repositories) {
+            repo.waitUntilHistoryIndexDone();
+        }
+        
         executor.shutdown();
         while (!executor.isTerminated()) {
             try {
@@ -524,6 +533,7 @@ public final class HistoryGuru {
                     "Received interrupt while waiting for executor to finish", exp);
             }
         }
+        RuntimeEnvironment.freeHistoryExecutor();
 
         // The cache has been populated. Now, optimize how it is stored on
         // disk to enhance performance and save space.

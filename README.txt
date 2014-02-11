@@ -14,8 +14,9 @@ OpenGrok - a wicked fast source browser
 6.  Change web application properties or name
 7.  OpenGrok systray
 8.  Information for developers
-9.  Authors
-10. Contact us
+9.  Tuning OpenGrok for large code bases
+10.  Authors
+11. Contact us
 
 
 1. Introduction
@@ -47,7 +48,7 @@ Offical page of the project is on:
         http://ant.apache.org/
       - JFlex
         http://www.jflex.de/
-      - Netbeans (optional, at least 7.2, will need Ant 1.8.1)
+      - Netbeans (optional, at least 7.4, will need Ant 1.8.1)
         http://netbeans.org/
 
 3. Usage
@@ -97,14 +98,14 @@ it and start the web application.
 4.1 Setting up the sources
 --------------------------
 
-Source base must be available locally for OpenGrok to work efficiently.
+Source base should be available locally for OpenGrok to work efficiently.
 No changes are required to your source tree. If the code is under source
 control management (SCM) OpenGrok requires the checked out source tree under
 SRC_ROOT.
 
 By itself OpenGrok does not perform the setup of the source code repositories
-or sychronization of the source code with its origin. This is to be done by
-the user or automatic scripts.
+or sychronization of the source code with its origin. This needs to be done by
+the user or by using automatic scripts.
 
 It is possible for SCM systems which are not distributed (Subversion, CVS)
 to use a remote repository but this is not recommended due to the performance
@@ -116,6 +117,11 @@ to have environment for given SCM systems installed and in a path accessible
 by OpenGrok.
 
 Note that OpenGrok ignores symbolic links.
+
+If you want to skip indexing the history of a particular directory
+(and all of it's subdirectories), you can touch '.opengrok_skip_history' file
+at the root of that directory.
+
 
 4.2 Using Opengrok wrapper script to create indexes
 ---------------------------------------------------
@@ -180,6 +186,11 @@ Once above command finishes without errors
 (e.g. SEVERE: Failed to send configuration to localhost:2424),
 you should be able to enjoy your opengrok and search your sources using
 latest indexes and setup.
+
+It is assumed that any SCM commands are reachable in one of the components
+of the PATH environment variable (e.g. 'git' command for Git repositories).
+Likewise, this should be maintained in the environment of the user which runs
+the web server instance.
 
 Congratulations, you should now be able to point your browser to
 http://<YOUR_WEBAPP_SERVER>:<WEBAPPSRV_PORT>/source to work with your fresh
@@ -277,10 +288,10 @@ To configure the webapp source.war, look into the parameters defined in
 web.xml of source.war file and change them (see note1) appropriately.
 
     * HEADER: is the fragment of HTML that will be used to display title or
-    logo of your project
+              logo of your project
     * SRC_ROOT: absolute path name of the root directory of your source tree
     * DATA_ROOT: absolute path of the directory where OpenGrok data
-    files are stored
+                 files are stored
        - Header file 'header_include' can be created under DATA_ROOT.
 	 The contents of this file file will be appended to the header of each
 	 web page after the OpenGrok logo element.
@@ -443,11 +454,13 @@ Copy it over from:
   Solaris 11: /opt/SUNWjavadb/lib/derbyclient.jar
   Debian: /usr/lib/jvm/java-6-sun/db/lib/derbyclient.jar
 
-  For example on Solaris 11 with bundled Java DB and Tomcat the command
-  will be:
+  For example on Solaris 11 with bundled Java DB and Tomcat and OpenGrok
+  installed from the OSOLopengrok package the command will be:
 
     # cp /opt/SUNWjavadb/lib/derbyclient.jar \
           /var/tomcat6/webapps/source/WEB-INF/lib/
+    # cp /opt/SUNWjavadb/lib/derbyclient.jar \
+          /usr/opengrok/lib
 
 3) Use these options with indexer when indexing/generating the configuration:
    -D -H
@@ -568,12 +581,12 @@ This agent is work in progress, so it might not fully work.
 Just run 'ant' from command line in the top-level directory or use build
 process driven by graphical developer environment such as Netbeans.
 
-Note: in case you are behind http proxy, use ANT_OPTS to download lucene
+Note: in case you are behind http proxy, use ANT_OPTS to download jflex, lucene
 E.g. $ ANT_OPTS="-Dhttp.proxyHost=?.? -Dhttp.proxyPort=80" ant
 
 
 8.0.1 Package build
------------------
+-------------------
 
 Run 'ant package' to create package (specific for the operating system this is
 being executed on) under the dist/ directory.
@@ -772,7 +785,7 @@ Which will result in:
   cpd_report.xml cpd_report.txt
 
 8.6 Using JDepend
----------------------
+-----------------
 
 To see dependencies in the source code, you can use JDepend from
 http://clarkware.com/software/JDepend.html.
@@ -794,8 +807,66 @@ Output is stored in the jdepend directory:
   $ ls jdepend/
   report.txt  report.xml
 
-9. Authors
-----------
+9. Tuning OpenGrok for large code bases
+---------------------------------------
+
+While indexing big source repos you might consider using ZFS filesystem to give 
+you advantage of datasets which can be flipped over or cloned when needed.
+If the machine is strong enough it will also give you an option to 
+incrementally index in parallel to having the current sources and index in sync.
+(So tomcat sees certain zfs datasets, then you just stop it, flip datasets to 
+the ones that were updated by SCM/index and start tomcat again - outage is 
+minimal, sources+indexes are ALWAYS in sync, users see the truth)
+
+OpenGrok script by default uses 2G of heap and 16MB per thread for flush size of 
+lucene docs indexing(when to flush to disk).
+It also uses default 32bit JRE.
+This MIGHT NOT be enough. You might need to consider this:
+Lucene 4.x sets indexer defaults:
+ DEFAULT_RAM_PER_THREAD_HARD_LIMIT_MB = 1945;
+ DEFAULT_MAX_THREAD_STATES = 8;
+ DEFAULT_RAM_BUFFER_SIZE_MB = 16.0; 
+ - which might grow as big as 16GB (though DEFAULT_RAM_BUFFER_SIZE_MB shouldn't
+ really allow it, but keep it around 1-2GB)
+
+ - the lucenes RAM_BUFFER_SIZE_MB can be tuned now using the parameter -m, so 
+running a 8GB 64 bit server JDK indexer with tuned docs flushing(on Solaris 11):
+
+ # export JAVA=/usr/java/bin/`isainfo -k`/java
+ (or use /usr/java/bin/amd64/java )
+ # export JAVA_OPTS="-Xmx8192m -server"
+ # OPENGROK_FLUSH_RAM_BUFFER_SIZE="-m 256" ./OpenGrok index /source
+
+Tomcat by default also supports only small deployments. For bigger ones you
+MIGHT need to increase its heap which might necessitate the switch to 64-bit 
+Java. It will most probably be the same for other containers as well.
+For tomcat you can easily get this done by creating conf/setenv.sh:
+
+ # cat conf/setenv.sh
+ # 64-bit Java
+ JAVA_OPTS="$JAVA_OPTS -d64 -server"
+
+ # OpenGrok memory boost to cover all-project searches
+ # (7 MB * 247 projects + 300 MB for cache should be enough)
+ # 64-bit Java allows for more so let's use 8GB to be on the safe side.
+ # We might need to allow more for concurrent all-project searches.
+ JAVA_OPTS="$JAVA_OPTS -Xmx8g"
+
+ export JAVA_OPTS
+
+
+For tomcat you might also hit a limit for http header size (we use it to send 
+the project list when requesting search results):
+ - increase(add) in conf/server.xml maxHttpHeaderSize
+  connectionTimeout="20000"
+ maxHttpHeaderSize="65536"
+  redirectPort="8443" />
+
+Refer to docs of other containers for more info on how to achieve the same.
+
+
+10. Authors
+-----------
 
 The project has been originally conceived in Sun Microsystems by Chandan B.N.
 
@@ -805,8 +876,9 @@ Knut Pape, eBriefkasten.de
 Martin Englund, (originally Sun Microsystems)
 Knut Anders Hatlen, Oracle. http://blogs.oracle.com/kah/
 Lubos Kosco, Oracle. http://blogs.oracle.com/taz/
+Vladimir Kotal, Oracle. http://blogs.oracle.com/vlad/
 
-10. Contact us
+11. Contact us
 --------------
 
 Feel free to participate in discussion on discuss@opengrok.java.net.

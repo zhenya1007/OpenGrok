@@ -85,7 +85,12 @@ public final class Configuration {
      * or when you clear your web cookies
      */
     private Project defaultProject;
-    private int indexWordLimit;
+    /**
+     * Default size of memory to be used for flushing of lucene docs
+     * per thread.
+     * Lucene 4.x uses 16MB and 8 threads, so below is a nice tunable.
+     */
+    private double ramBufferSize;
     private boolean verbose;
     /**
      * If below is set, then we count how many files per project we need
@@ -119,7 +124,18 @@ public final class Configuration {
     private boolean chattyStatusPage;
     private final Map<String, String> cmds;
     private int tabSize;
+    private int command_timeout;
     private static final Logger logger = Logger.getLogger(Configuration.class.getName());
+    
+    public static final double defaultRamBufferSize=16;
+    public static final int defaultScanningDepth=3;
+
+    /**
+     * The name of the eftar file relative to the <var>DATA_ROOT</var>, which
+     * contains definition tags.
+     */
+    public static final String EFTAR_DTAGS_FILE = "index/dtags.eftar";
+    private transient File dtagsEftar = null;
 
     /**
      * Get the default tab size (number of space characters per tab character)
@@ -161,6 +177,14 @@ public final class Configuration {
         this.scanningDepth = scanningDepth;
     }
 
+    public int getCommandTimeout() {
+        return command_timeout;
+    }
+
+    public void setCommandTimeout(int timeout) {
+        this.command_timeout = timeout;
+    }
+    
     /**
      * Creates a new instance of Configuration
      */
@@ -175,17 +199,17 @@ public final class Configuration {
         //setUrlPrefix("../s?"); // TODO generate relative search paths, get rid of -w <webapp> option to indexer !
         setCtags(System.getProperty("org.opensolaris.opengrok.analysis.Ctags", "ctags"));
         //below can cause an outofmemory error, since it is defaulting to NO LIMIT
-        setIndexWordLimit(Integer.MAX_VALUE);
+        setRamBufferSize(defaultRamBufferSize); //MB
         setVerbose(false);
         setPrintProgress(false);
         setGenerateHtml(true);
         setQuickContextScan(true);
         setIgnoredNames(new IgnoredNames());
         setIncludedNames(new Filter());
-        setUserPage("http://www.opensolaris.org/viewProfile.jspa?username=");
-        setBugPage("http://bugs.opensolaris.org/bugdatabase/view_bug.do?bug_id=");
+        setUserPage("http://www.myserver.org/viewProfile.jspa?username=");
+        setBugPage("http://bugs.myserver.org/bugdatabase/view_bug.do?bug_id=");
         setBugPattern("\\b([12456789][0-9]{6})\\b");
-        setReviewPage("http://arc.opensolaris.org/caselog/PSARC/");
+        setReviewPage("http://arc.myserver.org/caselog/PSARC/");
         setReviewPattern("\\b(\\d{4}/\\d{3})\\b"); // in form e.g. PSARC 2008/305
         setWebappLAF("default");
         setRemoteScmSupported(false);
@@ -196,12 +220,13 @@ public final class Configuration {
         setTagsEnabled(false);
         setHitsPerPage(25);
         setCachePages(5);
-        setScanningDepth(3); // default depth of scanning for repositories
+        setScanningDepth(defaultScanningDepth); // default depth of scanning for repositories
         setAllowedSymlinks(new HashSet<String>());
         //setTabSize(4);
         cmds = new HashMap<String, String>();
         setSourceRoot(null);
         setDataRoot(null);
+        setCommandTimeout(600); // 10 minutes
     }
 
     public String getRepoCmd(String clazzName) {
@@ -380,12 +405,18 @@ public final class Configuration {
         return defaultProject;
     }
 
-    public int getIndexWordLimit() {
-        return indexWordLimit;
+    public double getRamBufferSize() {
+        return ramBufferSize;
     }
 
-    public void setIndexWordLimit(int indexWordLimit) {
-        this.indexWordLimit = indexWordLimit;
+    /**
+     * set size of memory to be used for flushing docs (default 16 MB)
+     * (this can improve index speed a LOT)
+     * note that this is per thread (lucene uses 8 threads by default in 4.x)
+     * @param ramBufferSize new size in MB
+     */
+    public void setRamBufferSize(double ramBufferSize) {
+        this.ramBufferSize = ramBufferSize;
     }
 
     public boolean isVerbose() {
@@ -643,13 +674,6 @@ public final class Configuration {
     }
 
     /**
-     * The name of the eftar file relative to the <var>DATA_ROOT</var>, which
-     * contains definition tags.
-     */
-    public static final String EFTAR_DTAGS_FILE = "index/dtags.eftar";
-    private transient String dtagsEftar = null;
-
-    /**
      * Get the eftar file, which contains definition tags.
      *
      * @return {@code null} if there is no such file, the file otherwise.
@@ -658,12 +682,10 @@ public final class Configuration {
         if (dtagsEftar == null) {
             File tmp = new File(getDataRoot() + "/" + EFTAR_DTAGS_FILE);
             if (tmp.canRead()) {
-                dtagsEftar = tmp.getName();
-            } else {
-                dtagsEftar = "";
+                dtagsEftar = tmp;
             }
         }
-        return dtagsEftar.isEmpty() ? null : new File(dtagsEftar);
+        return dtagsEftar;
     }
 
     public String getDatabaseDriver() {

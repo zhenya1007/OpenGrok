@@ -3,13 +3,13 @@
 # OpenGrok Wrapper (initial setup and cron job updating)
 #
 # Supported Operating Systems:
-#   - Solaris 10  (SunOS 5.10)
 #   - Solaris 11  (SunOS 5.11)
+#   - Solaris 12  (SunOS 5.12)
 #   - Debian      (Linux)
 #
 # Supported Deployment Engines:
+#   - Tomcat 7
 #   - Tomcat 6
-#   - Tomcat 5.5
 #   - Glassfish
 #
 # Supported Environment Variables:
@@ -25,8 +25,10 @@
 #                                 options for CTags program (for its --options
 #                                 switch), default is DATA_ROOT/etc/ctags.config
 #   - JAVA_HOME                   Full Path to Java Installation Root
-#   - JAVA                        Full Path to java binary
-#   - JAVA_OPTS                   Java options
+#   - JAVA                        Full Path to java binary (to enable 64bit JDK)
+#   - JAVA_OPTS                   Java options (e.g. for JVM memory increase
+#                                 or enabling server JDK)
+#                                 JAVA_OPTS=-Xmx2048m is the default!
 #   - OPENGROK_APP_SERVER         Application Server ("Tomcat" or "Glassfish")
 #   - OPENGROK_WAR_TARGET_TOMCAT  Tomcat Specific WAR Target Directory
 #   - OPENGROK_WAR_TARGET_GLASSFISH Glassfish Specific WAR Target Directory
@@ -47,15 +49,25 @@
 #                                 (by default 3 directories from SRC_ROOT)
 #   - OPENGROK_WEBAPP_CFGADDR     Web app address to send configuration to
 #                                 (use "none" to avoid sending it to web app)
+#   - OPENGROK_WEBAPP_CONTEXT     Context URL of the OpenGrok webapp
+#                                 (by default /source)
 #   - OPENGROK_WPREFIX            Disable wildcard prefix search query
 #                                 support (*)
 #   - OPENGROK_DERBY              if set, then indexer tries to use derby as
 #                                 historycache (see derby command of this
 #                                 script)
+#   - OPENGROK_DERBY_URL          Use specific URL to JavaDB, e.g.
+#                                 "jdbc:derby://localhost:1528/cachedb;create=true"
+#                                 (default port is 1527)
 #   - OPENGROK_TAG                Enable parsing of revision tags into the History
 #                                 view
 #   - READ_XML_CONFIGURATION      file with read only configuration
 #                                 - temporary workaround for bug # 327
+#   - OPENGROK_FLUSH_RAM_BUFFER_SIZE="-m 16" - set RAM buffer size for flushing, 
+#                                 default is 16MB per thread, you might try to 
+#                                 increase it to 256MB, but do increase JVM to 
+#                                 4/8/16GB ! Lucene defaults to 8 threads.
+#                                 Increase JVM memory as noted using JAVA_OPTS
 #
 # Notes:
 #   (*) Any Non-Empty String will enable these options
@@ -207,6 +219,9 @@ DefaultInstanceConfiguration()
 
     # OPTIONAL: Ignore these patterns as names of files or directories
     #IGNORE_PATTERNS="-i dummy"
+    # To ignore skipping just the history cache creation for a particular
+    # directory and all of it's subdirectories, touch an empty
+    # .opengrok_skip_history file at the root of that directory
 
     # OPTIONAL: Enable Projects
     #           (Every directory in SRC_ROOT is considered a separate project)
@@ -245,13 +260,6 @@ DefaultInstanceConfiguration()
     #            Note the quoting requirements)
     #SKIN='-L default'
 
-    # OPTIONAL: Set Maximum Indexed Words Per File
-    # Note, that you might run out of memory, then either increase JVM memory
-    # as noted in JAVA_OPTS, or set this limit(if you don't mind opengrok not
-    # indexing the rest of the file, once the limit is reached)
-    #           (default: unlimited)
-    #MAX_INDEXED_WORDS="-m 100000"
-
     # OPTIONAL: Configuration Address (host:port)
     #           (conf/web.xml default is localhost:2424)
     WEBAPP_CONFIG=""
@@ -268,9 +276,16 @@ DefaultInstanceConfiguration()
         WEBAPP_CONFIG="-U ${WEBAPP_CONFIG_ADDRESS}"
     fi
 
+    # OPTIONAL: Context URL of the OpenGrok webapp
+    #           (default is /source)
+    WEBAPP_CONTEXT=""
+    if [ -n "${OPENGROK_WEBAPP_CONTEXT}" ]; then
+        WEBAPP_CONTEXT="-w ${OPENGROK_WEBAPP_CONTEXT}"
+    fi
+
     # OPTIONAL: JVM Options
     JAVA_OPTS="${JAVA_OPTS:--Xmx2048m}"
-
+    
     # OPTIONAL: Full Path to History Utilities
     HG="`Which hg`"
     CVS="`Which cvs`"
@@ -305,7 +320,10 @@ ${BZR:+-Dorg.opensolaris.opengrok.history.Bazaar=$BZR} \
     #
     if [ -n "${OPENGROK_DERBY}" ]
     then
-        DERBY_HISTORY_CACHE="-D"
+        DERBY_OPTIONS="-D"
+	if [ -n "${OPENGROK_DERBY_URL}" ]; then
+		DERBY_OPTIONS="${DERBY_OPTIONS} -u ${OPENGROK_DERBY_URL}"
+	fi
     fi
 
     # OPTIONAL: Show revision tags in History view.
@@ -439,6 +457,7 @@ FindJavaHome()
     case "${OS_NAME}:${OS_VERSION}" in
         SunOS:5.10) javaHome="/usr/jdk/instances/jdk1.7.0" ;;
         SunOS:5.11) javaHome="/usr/jdk/latest"             ;;
+        SunOS:5.12) javaHome="/usr/jdk/latest"             ;;
         Linux:*)
             if [ -f /etc/alternatives/java ]
             then
@@ -491,8 +510,7 @@ FindApplicationServerType()
 
     if [    -d "/var/tomcat6/webapps"        \
          -o -d "/var/lib/tomcat6/webapps"    \
-         -o -d "/var/lib/tomcat5/webapps"    \
-         -o -d "/var/lib/tomcat5.5/webapps"  \
+         -o -d "/var/lib/tomcat7/webapps"    \
        ]
     then
         echo "Tomcat"
@@ -525,8 +543,7 @@ DetermineWarDirectoryTomcat()
         ${OPENGROK_TOMCAT_BASE} \
         /var/tomcat6            \
         /var/lib/tomcat6        \
-        /var/lib/tomcat5        \
-        /var/lib/tomcat5.5
+        /var/lib/tomcat7
     do
         if [ -d "${prefix}/webapps" ]
         then
@@ -658,8 +675,23 @@ ValidateConfiguration()
 
     if [ -n "${OPENGROK_DERBY}" ]
     then
-        Warning "CHECK: derbyclient.jar needs to be in where the rest of " \
-	    "opengrok used jars are and in unpacked source.war in WEB-INF/lib !"
+        if [ `uname -s` == "SunOS" -a -d /opt/SUNWjavadb -a -d /usr/opengrok ];
+	then
+	    if [ -d "/var/tomcat6" -a \
+	        ! -r "/var/tomcat6/webapps/source/WEB-INF/lib/derbyclient.jar" ];
+	    then
+	        FatalError "JavaDB on but no derbyclient.jar under" \
+		    "/var/tomcat6/webapps/source/WEB-INF/lib"
+	    fi
+	    if [ ! -r "/usr/opengrok/lib/derbyclient.jar" ]; then
+	        FatalError "JavaDB on but no derbyclient.jar under" \
+		    "/usr/opengrok/lib"
+	    fi
+	else
+            Warning "CHECK: derbyclient.jar needs to be in where the rest of " \
+	        "opengrok used jars are and in unpacked source.war in " \
+		"WEB-INF/lib !"
+	fi
     fi
 }
 
@@ -731,7 +763,7 @@ StdInvocation()
         ${JAVA_DEBUG}                                           \
         -jar ${OPENGROK_JAR}                                    \
         ${IGNORE_PATTERNS} ${ENABLE_PROJECTS}                   \
-        ${DERBY_HISTORY_CACHE}                                  \
+        ${DERBY_OPTIONS}					\
         ${HISTORY_TAGS}						\
         ${SCAN_FOR_REPOSITORY} ${REMOTE_REPOSITORIES}           \
         ${SCAN_DEPTH}                                           \
@@ -739,10 +771,11 @@ StdInvocation()
         ${PROGRESS}                                             \
         ${EXUBERANT_CTAGS:+-c} ${EXUBERANT_CTAGS}               \
         ${CTAGS_OPTIONS_FILE:+-o} ${CTAGS_OPTIONS_FILE}         \
-        ${MAX_INDEXED_WORDS} ${SKIN} ${LEADING_WILDCARD}        \
+        ${OPENGROK_FLUSH_RAM_BUFFER_SIZE} ${SKIN} ${LEADING_WILDCARD}        \
         ${READ_XML_CONF}                                        \
         -W ${XML_CONFIGURATION}                                 \
         ${WEBAPP_CONFIG}                                        \
+        ${WEBAPP_CONTEXT}                                       \
         -s ${SRC_ROOT} -d ${DATA_ROOT}                          \
         "${@}"
 }
@@ -822,6 +855,14 @@ DerbyServer()
         SunOS:5.10) Error "unsupported OS" ;;
         SunOS:5.11)
                     /sbin/svcadm enable javadb
+                     ;;
+        SunOS:5.12)
+                    echo "Below might need your socket permission setup"
+                    echo "see JDK1.7_51 release notes"
+                    set -x
+                    mkdir -p $DATA_ROOT/derby
+                    java -Dderby.system.home=$DATA_ROOT/derby \
+		        -jar /usr/jdk/instances/jdk1.7.0/db/lib/derbynet.jar start
                      ;;
         Linux:*)
                     mkdir -p $DATA_ROOT/derby

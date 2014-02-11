@@ -49,6 +49,7 @@ public class QueryBuilder {
     public static final String REFS = "refs";
     public static final String PATH = "path";
     public static final String HIST = "hist";
+    public static final String TYPE = "type";
     /**
      * Fields we use in lucene internal ones
      */
@@ -160,6 +161,25 @@ public class QueryBuilder {
     public String getHist() {
         return getQueryText(HIST);
     }
+    
+    /**
+     * Set search string for the "type" field.
+     *
+     * @param type query string to set
+     * @return this instance
+     */
+    public QueryBuilder setType(String type) {
+        return addQueryText(TYPE, type);
+    }
+
+    /**
+     * Get search string for the "type" field.
+     *
+     * @return {@code null} if not set, the query string otherwise.
+     */
+    public String getType() {
+        return getQueryText(TYPE);
+    }
 
     /**
      * Get a map containing the query text for each of the fields that have been
@@ -179,6 +199,21 @@ public class QueryBuilder {
     public int getSize() {
         return queries.size();
     }
+
+    /**
+     * Used to tell if this search only has the "definitions" field filled in
+     *
+     * @return whether above statement is true or false
+     */
+    public boolean isDefSearch() {
+
+        return ((getQueryText(FULL) == null) &&
+            (getQueryText(REFS) == null) &&
+            (getQueryText(PATH) == null) &&
+            (getQueryText(HIST) == null) &&
+            (getQueryText(DEFS) != null))
+            ? true : false;
+    }    
 
     /**
      * Build a new query based on the query text that has been passed in to this

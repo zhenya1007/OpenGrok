@@ -44,6 +44,7 @@ import java.util.logging.Logger;
 import java.util.regex.Pattern;
 import javax.servlet.http.Cookie;
 import javax.servlet.http.HttpServletRequest;
+import javax.servlet.ServletRequest;
 import org.apache.commons.jrcs.diff.Diff;
 import org.apache.commons.jrcs.diff.DifferentiationFailedException;
 import org.opensolaris.opengrok.analysis.AnalyzerGuru;
@@ -58,10 +59,10 @@ import org.opensolaris.opengrok.search.QueryBuilder;
 import org.opensolaris.opengrok.util.IOUtils;
 
 /**
- * A simple container to lazy initialize common vars wrt. a single request. It
- * MUST NOT be shared between several requests and {@link #cleanup()} should be
- * called before the page context gets destroyed (e.g. by overwriting
- * {@code jspDestroy()} or when leaving the {@code service} method. <p> Purpose
+ * A simple container to lazy initialize common vars wrt. a single request.
+ * It MUST NOT be shared between several requests and
+ * {@link #cleanup(ServletRequest)} should be called before the page context 
+ * gets destroyed (e.g.when leaving the {@code service} method). <p> Purpose
  * is to decouple implementation details from web design, so that the JSP
  * developer does not need to know every implementation detail and normally has
  * to deal with this class/wrapper, only (so some people may like to call this
@@ -104,6 +105,9 @@ public final class PageConfig {
     private File dataRoot;
     private StringBuilder headLines;
     private static final Logger log = Logger.getLogger(PageConfig.class.getName());
+
+    private static final String ATTR_NAME = PageConfig.class.getCanonicalName();
+    private HttpServletRequest req;
 
     /**
      * Add the given data to the &lt;head&gt; section of the html page to
@@ -311,8 +315,9 @@ public final class PageConfig {
                         && !getRequestedRevision().isEmpty() && !hasHistory()) {
                     return null;
                 }
-            } else if (getPrefix() == Prefix.RAW_P) {
-                return null;
+            } else if ((getPrefix() == Prefix.RAW_P) ||
+                (getPrefix() == Prefix.DOWNLOAD_P)) {
+                    return null;
             }
         }
         return redir == null ? "" : redir;
@@ -461,7 +466,12 @@ public final class PageConfig {
      */
     public QueryBuilder getQueryBuilder() {
         if (queryBuilder == null) {
-            queryBuilder = new QueryBuilder().setFreetext(req.getParameter("q")).setDefs(req.getParameter("defs")).setRefs(req.getParameter("refs")).setPath(req.getParameter("path")).setHist(req.getParameter("hist"));
+            queryBuilder = new QueryBuilder().setFreetext(req.getParameter("q"))
+                    .setDefs(req.getParameter("defs"))
+                    .setRefs(req.getParameter("refs"))
+                    .setPath(req.getParameter("path"))
+                    .setHist(req.getParameter("hist"))
+                    .setType(req.getParameter("type"));
 
             // This is for backward compatibility with links created by OpenGrok
             // 0.8.x and earlier. We used to concatenate the entire query into a
@@ -578,7 +588,7 @@ public final class PageConfig {
     }
 
     /**
-     * Get the annotation for the reqested resource.
+     * Get the annotation for the requested resource.
      *
      * @return {@code null} if not available or annotation was not requested,
      * the cached annotation otherwise.
@@ -972,7 +982,8 @@ public final class PageConfig {
     public boolean resourceNotAvailable() {
         getIgnoredNames();
         return getResourcePath().equals("/") || ignoredNames.ignore(getPath())
-                || ignoredNames.ignore(resourceFile.getParentFile().getName());
+                || ignoredNames.ignore(resourceFile.getParentFile().getName())
+                || ignoredNames.ignore(resourceFile);
     }
 
     /**
@@ -1195,25 +1206,30 @@ public final class PageConfig {
         request.setAttribute(ATTR_NAME, pcfg);
         return pcfg;
     }
-    private static final String ATTR_NAME = PageConfig.class.getCanonicalName();
-    private HttpServletRequest req;
-
+    
     private PageConfig(HttpServletRequest req) {
         this.req = req;
     }
 
     /**
-     * Cleanup all allocated resources. Should always be called right before
-     * leaving the _jspService / service.
+     * Cleanup all allocated resources (if any) from the instance attached to 
+     * the given request.
+     * @param sr request to check, cleanup. Ignored if {@code null}.
+     * @see PageConfig#get(HttpServletRequest)
+     * 
      */
-    public void cleanup() {
-        if (req != null) {
-            req.removeAttribute(ATTR_NAME);
-            req = null;
+    public static void cleanup(ServletRequest sr) {
+        if (sr == null) {
+            return;
         }
-        env = null;
-        if (eftarReader != null) {
-            eftarReader.close();
+        PageConfig cfg = (PageConfig) sr.getAttribute(ATTR_NAME);
+        if (cfg == null) {
+            return;
+        }        
+        sr.removeAttribute(ATTR_NAME);
+        cfg.env = null;
+        if (cfg.eftarReader != null) {
+            cfg.eftarReader.close();
         }
     }
 }

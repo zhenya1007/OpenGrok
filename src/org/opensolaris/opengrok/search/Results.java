@@ -37,6 +37,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.logging.Level;
 import java.util.zip.GZIPInputStream;
+import org.apache.lucene.analysis.charfilter.HTMLStripCharFilter;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.index.CorruptIndexException;
 import org.apache.lucene.index.IndexableField;
@@ -45,7 +46,6 @@ import org.apache.lucene.search.ScoreDoc;
 import org.opensolaris.opengrok.OpenGrokLogger;
 import org.opensolaris.opengrok.analysis.Definitions;
 import org.opensolaris.opengrok.analysis.FileAnalyzer.Genre;
-import org.opensolaris.opengrok.analysis.TagFilter;
 import org.opensolaris.opengrok.history.HistoryException;
 import org.opensolaris.opengrok.web.Prefix;
 import org.opensolaris.opengrok.web.SearchHelper;
@@ -92,7 +92,7 @@ public final class Results {
 
     private static String getTags(File basedir, String path, boolean compressed) {
         char[] content = new char[1024 * 8];
-        try (TagFilter r = new TagFilter(getXrefReader(basedir, path, compressed))) {
+        try (HTMLStripCharFilter r = new HTMLStripCharFilter(getXrefReader(basedir, path, compressed))) {
             int len = r.read(content);
             return new String(content, 0, len);
         } catch (Exception e) {
@@ -143,8 +143,6 @@ public final class Results {
         String xrefPrefix = sh.contextPath + Prefix.XREF_P;
         String morePrefix = sh.contextPath + Prefix.MORE_P;
         String xrefPrefixE = ctxE + Prefix.XREF_P;
-        String histPrefixE = ctxE + Prefix.HIST_L;
-        String rawPrefixE = ctxE + Prefix.RAW_P;
         File xrefDataDir = new File(sh.dataRoot, Prefix.XREF_P.toString());
 
         for (Map.Entry<String, ArrayList<Document>> entry :
@@ -165,17 +163,8 @@ public final class Results {
             for (Document doc : entry.getValue()) {
                 String rpath = doc.get("path");
                 String rpathE = Util.URIEncodePath(rpath);
-                out.write("<tr><td class=\"q\"><a href=\"");
-                out.write(histPrefixE);
-                out.write(rpathE);
-                out.write("\" title=\"History\">H</a> <a href=\"");
-                out.write(xrefPrefixE);
-                out.write(rpathE);
-                out.write("?a=true\" title=\"Annotate\">A</a> <a href=\"");
-                out.write(rawPrefixE);
-                out.write(rpathE);
-                out.write("\" title=\"Download\">D</a>");
-                out.write("</td>");
+                out.write("<tr>");
+                Util.writeHAD(out, sh.contextPath, rpathE, false);
                 out.write("<td class=\"f\"><a href=\"");
                 out.write(xrefPrefixE);
                 out.write(rpathE);
@@ -202,8 +191,8 @@ public final class Results {
                         FileReader r = genre == Genre.PLAIN
                                 ? new FileReader(new File(sh.sourceRoot, rpath))
                                 : null;
-                        sh.sourceContext.getContext(r, out, xrefPrefix,
-                                morePrefix, rpath, tags, true, null);
+                        sh.sourceContext.getContext(r, out, xrefPrefix, morePrefix, 
+                                rpath, tags, true, sh.builder.isDefSearch(), null);
                     }
                 }
                 if (sh.historyContext != null) {

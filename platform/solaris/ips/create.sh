@@ -6,10 +6,8 @@
 # Common Development and Distribution License (the "License").
 # You may not use this file except in compliance with the License.
 #
-# You can obtain a copy of the license at usr/src/OPENSOLARIS.LICENSE
-# or http://www.opensolaris.org/os/licensing.
-# See the License for the specific language governing permissions
-# and limitations under the License.
+# See LICENSE.txt included in this distribution for the specific
+# language governing permissions and limitations under the License.
 #
 # When distributing Covered Code, include this CDDL HEADER in each
 # file and include the License file at usr/src/OPENSOLARIS.LICENSE.
@@ -79,7 +77,7 @@ PKGSEND add file doc/ctags.config mode=0444 owner=root group=sys path=/usr/openg
 
 
 # install libs
-LV=4.2.1
+LV=4.6.1
 for file in ant.jar bcel-5.2.jar \
             lucene-analyzers-common-${LV}.jar lucene-core-${LV}.jar lucene-queryparser-${LV}.jar lucene-suggest-${LV}.jar \ 
             jrcs.jar \

@@ -18,7 +18,7 @@
  */
 
 /*
- * Copyright (c) 2009, 2012, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2009, 2013, Oracle and/or its affiliates. All rights reserved.
  */
 
 package org.opensolaris.opengrok.history;
@@ -34,9 +34,14 @@ import java.util.Date;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
+import static junit.framework.Assert.assertEquals;
+import static junit.framework.Assert.assertFalse;
+import static junit.framework.Assert.assertTrue;
 import junit.framework.Test;
 import junit.framework.TestCase;
 import junit.framework.TestSuite;
+import org.opensolaris.opengrok.configuration.Configuration;
+import org.opensolaris.opengrok.configuration.RuntimeEnvironment;
 import org.opensolaris.opengrok.util.Executor;
 import org.opensolaris.opengrok.util.TestRepository;
 
@@ -100,6 +105,16 @@ public class JDBCHistoryCacheTest extends TestCase {
                 throw sqle;
             }
         }
+
+        // Reset any changes the test made to the runtime environment.
+        RuntimeEnvironment.getInstance().setConfiguration(new Configuration());
+
+        // We really need to destroy the thread pool here since some of the
+        // threads might have some thread-local variables cached from previous
+        // test runs (like tags enabled) and this makes other tests fail in
+        // very nasty fashion (what is caused by fetch of particular thread
+        // with cached thread-local value appears like race condition).
+        RuntimeEnvironment.freeHistoryExecutor();
     }
 
     /**
@@ -175,6 +190,11 @@ public class JDBCHistoryCacheTest extends TestCase {
         cache.store(historyToStore, repos);
         cache.optimize();
 
+        // test reindex
+        History historyNull = new History();
+        cache.store(historyNull, repos);
+        cache.optimize();
+
         // test get history for single file
 
         File makefile = new File(reposRoot, "Makefile");
@@ -202,6 +222,17 @@ public class JDBCHistoryCacheTest extends TestCase {
 
         assertFalse(entryIt.hasNext());
 
+        // test get history for renamed file
+
+        File novel = new File(reposRoot, "novel.txt");
+        assertTrue(novel.exists());
+
+        retrievedHistory = cache.get(novel, repos, true);
+
+        entries = retrievedHistory.getHistoryEntries();
+
+        assertEquals("Unexpected number of entries", 6, entries.size());
+
         // test get history for directory
 
         History dirHistory = cache.get(reposRoot, repos, true);
@@ -220,7 +251,7 @@ public class JDBCHistoryCacheTest extends TestCase {
         History updatedHistory = cache.get(reposRoot, repos, true);
 
         HistoryEntry newEntry = new HistoryEntry(
-                "9:41e110bfdfb9",
+                "10:1e392ef0b0ed",
                 new Date(1245446973L / 60 * 60 * 1000), // whole minutes only
                 "xyz", null, "Return failure when executed with no arguments",
                 true);
@@ -236,6 +267,7 @@ public class JDBCHistoryCacheTest extends TestCase {
         History clearedHistory = cache.get(reposRoot, repos, true);
         assertTrue("History should be empty",
                 clearedHistory.getHistoryEntries().isEmpty());
+
         cache.store(historyToStore, repos);
         assertSameEntries(historyToStore.getHistoryEntries(),
                 cache.get(reposRoot, repos, true).getHistoryEntries());
@@ -269,7 +301,7 @@ public class JDBCHistoryCacheTest extends TestCase {
         importHgChangeset(
                 reposRoot, getClass().getResource("hg-export.txt").getPath());
         repos.createCache(cache, latestRevision);
-        assertEquals("9:41e110bfdfb9", cache.getLatestCachedRevision(repos));
+        assertEquals("10:1e392ef0b0ed", cache.getLatestCachedRevision(repos));
     }
 
     /**
@@ -326,6 +358,10 @@ public class JDBCHistoryCacheTest extends TestCase {
         Repository repos = RepositoryFactory.getRepository(reposRoot);
         History history = repos.getHistory(reposRoot);
         cache.store(history, repos);
+
+        assertSameEntries(
+                history.getHistoryEntries(),
+                cache.get(reposRoot, repos, true).getHistoryEntries());
 
         // Set the lock timeout to one second to make it go faster.
         final Connection c = DriverManager.getConnection(getURL());
@@ -426,11 +462,47 @@ public class JDBCHistoryCacheTest extends TestCase {
         // Create an entry where author is null
         HistoryEntry e = new HistoryEntry(
                 "1", new Date(), null, null, "Initial revision", true);
-        e.addFile("/svn/file.txt");
+        e.addFile("/svn/c/main.c");
         List<HistoryEntry> entries = Collections.singletonList(e);
         cache.store(new History(entries), r);
         assertSameEntries(
                 entries,
                 cache.get(reposRoot, r, true).getHistoryEntries());
+    }
+
+    /**
+     * Test that tags work. Issue #101.
+     */
+    public void testTags() throws Exception {
+        // Enable tags
+        RuntimeEnvironment.getInstance().setTagsEnabled(true);
+
+        File reposRoot = new File(repositories.getSourceRoot(), "mercurial");
+        Repository repos = RepositoryFactory.getRepository(reposRoot);
+        History historyToStore = repos.getHistory(reposRoot);
+        cache.store(historyToStore, repos);
+        cache.optimize();
+
+        List<HistoryEntry> dirHistory =
+                cache.get(reposRoot, repos, false).getHistoryEntries();
+        assertEquals("Size of history", 10, dirHistory.size());
+        assertEquals("tip", dirHistory.get(0).getTags());
+        assertNull(dirHistory.get(1).getTags());
+        assertEquals("start_of_novel", dirHistory.get(2).getTags());
+        assertNull(dirHistory.get(3).getTags());
+
+        List<HistoryEntry> novelHistory =
+                cache.get(new File(reposRoot, "novel.txt"),
+                          repos, false).getHistoryEntries();
+        assertEquals("Size of history", 6, novelHistory.size());
+        assertEquals("tip", novelHistory.get(0).getTags());
+        assertEquals("start_of_novel", novelHistory.get(1).getTags());
+
+        List<HistoryEntry> maincHistory =
+                cache.get(new File(reposRoot, "main.c"),
+                          repos, false).getHistoryEntries();
+        assertEquals("Size of history", 2, maincHistory.size());
+        assertEquals("tip, start_of_novel", maincHistory.get(0).getTags());
+        assertNull(maincHistory.get(1).getTags());
     }
 }

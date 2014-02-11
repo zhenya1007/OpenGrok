@@ -100,7 +100,7 @@ PodEND = "=cut"
 }
 
 <POD> {
-^ {PodEND} .* / {EOL} {
+^ {PodEND} [^\n]* / {EOL} {
     yybegin(YYINITIAL); out.write(yytext()+"</span>");
     // without eol lookahead one could perhaps just use below and use yytext().trim() above ?
     //startNewLine();
@@ -143,7 +143,7 @@ PodEND = "=cut"
 {WhiteSpace}*{EOL}      { startNewLine(); }
  {WhiteSpace}   { out.write(yytext()); }
  [!-~]  { out.write(yycharat(0)); }
- .      { writeUnicodeChar(yycharat(0)); }
+ [^\n]      { writeUnicodeChar(yycharat(0)); }
 }
 
 <STRING, SCOMMENT, STRING, QSTRING, POD> {

@@ -29,6 +29,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.logging.Level;
 import java.util.zip.GZIPInputStream;
+import org.apache.lucene.analysis.charfilter.HTMLStripCharFilter;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.IndexReader;
@@ -44,7 +45,6 @@ import org.opensolaris.opengrok.OpenGrokLogger;
 import org.opensolaris.opengrok.analysis.CompatibleAnalyser;
 import org.opensolaris.opengrok.analysis.Definitions;
 import org.opensolaris.opengrok.analysis.FileAnalyzer.Genre;
-import org.opensolaris.opengrok.analysis.TagFilter;
 import org.opensolaris.opengrok.configuration.Project;
 import org.opensolaris.opengrok.configuration.RuntimeEnvironment;
 import org.opensolaris.opengrok.history.HistoryException;
@@ -74,7 +74,7 @@ public class SearchEngine {
     /**
      * version of lucene index common for whole app
      */
-    public static final Version LUCENE_VERSION = Version.LUCENE_42;
+    public static final Version LUCENE_VERSION = Version.LUCENE_46;
     /**
      * Holds value of property definition.
      */
@@ -95,6 +95,10 @@ public class SearchEngine {
      * Holds value of property symbol.
      */
     private String symbol;
+    /**
+     * Holds value of property type
+     */
+    private String type;
     /**
      * Holds value of property indexDatabase.
      */
@@ -136,7 +140,8 @@ public class SearchEngine {
                 .setDefs(definition)
                 .setRefs(symbol)
                 .setPath(file)
-                .setHist(history);
+                .setHist(history)
+                .setType(type);
     }
 
     public boolean isValidQuery() {
@@ -349,12 +354,12 @@ public class SearchEngine {
                         if (Genre.PLAIN == genre && (source != null)) {
                             hasContext = sourceContext.getContext(new InputStreamReader(new FileInputStream(source
                                     + filename)), null, null, null, filename,
-                                    tags, nhits > 100, ret);
+                                    tags, nhits > 100, false, ret);
                         } else if (Genre.XREFABLE == genre && data != null && summarizer != null) {
                             int l = 0;
                             try (Reader r = RuntimeEnvironment.getInstance().isCompressXref() ?
-                                     new TagFilter(new BufferedReader(new InputStreamReader(new GZIPInputStream(new FileInputStream(data + "/xref" + filename + ".gz"))))) :
-                                     new TagFilter(new BufferedReader(new FileReader(data + "/xref" + filename)))) {
+                                     new HTMLStripCharFilter(new BufferedReader(new InputStreamReader(new GZIPInputStream(new FileInputStream(data + "/xref" + filename + ".gz"))))) :
+                                     new HTMLStripCharFilter(new BufferedReader(new FileReader(data + "/xref" + filename)))) {
                                 l = r.read(content);
                             }
                             //TODO FIX below fragmenter according to either summarizer or context (to get line numbers, might be hard, since xref writers will need to be fixed too, they generate just one line of html code now :( )
@@ -372,11 +377,11 @@ public class SearchEngine {
                             }
                         } else {
                             OpenGrokLogger.getLogger().log(Level.WARNING, "Unknown genre: {0} for {1}", new Object[]{genre, filename});
-                            hasContext |= sourceContext.getContext(null, null, null, null, filename, tags, false, ret);
+                            hasContext |= sourceContext.getContext(null, null, null, null, filename, tags, false, false, ret);
                         }
                     } catch (FileNotFoundException exp) {
                         OpenGrokLogger.getLogger().log(Level.WARNING, "Couldn''t read summary from {0} ({1})", new Object[]{filename, exp.getMessage()});
-                        hasContext |= sourceContext.getContext(null, null, null, null, filename, tags, false, ret);
+                        hasContext |= sourceContext.getContext(null, null, null, null, filename, tags, false, false, ret);
                     }
                 }
                 if (historyContext != null) {
@@ -487,5 +492,23 @@ public class SearchEngine {
      */
     public void setSymbol(String symbol) {
         this.symbol = symbol;
+    }
+    
+    /**
+     * Getter for property type.
+     *
+     * @return Value of property type.
+     */
+    public String getType() {
+        return this.type;
+    }
+
+    /**
+     * Setter for property type.
+     *
+     * @param fileType New value of property type.
+     */
+    public void setType(String fileType) {
+        this.type = fileType;
     }
 }

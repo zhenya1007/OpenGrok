@@ -5,10 +5,8 @@
 # Common Development and Distribution License (the "License").
 # You may not use this file except in compliance with the License.
 #
-# You can obtain a copy of the license at usr/src/OPENSOLARIS.LICENSE
-# or http://www.opensolaris.org/os/licensing.
-# See the License for the specific language governing permissions
-# and limitations under the License.
+# See LICENSE.txt included in this distribution for the specific
+# language governing permissions and limitations under the License.
 #
 # When distributing Covered Code, include this CDDL HEADER in each
 # file and include the License file at usr/src/OPENSOLARIS.LICENSE.
@@ -62,10 +60,10 @@ f none usr/opengrok/doc/opengrok-agent.properties=platform/solaris/default/openg
 f none usr/opengrok/lib/opengrok.jar=dist/opengrok.jar 0444 root bin
 f none usr/opengrok/lib/ant.jar=dist/lib/ant.jar 0444 root bin
 f none usr/opengrok/lib/bcel-5.2.jar=lib/bcel-5.2.jar 0444 root bin
-f none usr/opengrok/lib/lucene-core-4.2.1.jar=lib/lucene-core-4.2.1.jar 0444 root bin
-f none usr/opengrok/lib/lucene-analyzers-common-4.2.1.jar=lib/lucene-analyzers-common-4.2.1.jar 0444 root bin
-f none usr/opengrok/lib/lucene-queryparser-4.2.1.jar=lib/lucene-queryparser-4.2.1.jar 0444 root bin
-f none usr/opengrok/lib/lucene-suggest-4.2.1.jar=lib/lucene-suggest-4.2.1.jar 0444 root bin
+f none usr/opengrok/lib/lucene-core-4.6.1.jar=lib/lucene-core-4.6.1.jar 0444 root bin
+f none usr/opengrok/lib/lucene-analyzers-common-4.6.1.jar=lib/lucene-analyzers-common-4.6.1.jar 0444 root bin
+f none usr/opengrok/lib/lucene-queryparser-4.6.1.jar=lib/lucene-queryparser-4.6.1.jar 0444 root bin
+f none usr/opengrok/lib/lucene-suggest-4.6.1.jar=lib/lucene-suggest-4.6.1.jar 0444 root bin
 f none usr/opengrok/lib/jrcs.jar=lib/jrcs.jar 0444 root bin
 f none usr/opengrok/lib/swing-layout-0.9.jar=lib/swing-layout-0.9.jar 0444 root bin
 f none usr/opengrok/lib/ogindexd=platform/solaris/smf/ogindexd 0555 root bin

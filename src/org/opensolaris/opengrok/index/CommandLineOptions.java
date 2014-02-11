@@ -34,11 +34,13 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.Iterator;
 import java.util.List;
+import org.opensolaris.opengrok.configuration.Configuration;
 
 public class CommandLineOptions {
 
     private static final String ON_OFF = "on/off";
     private static final String NUMBER = "number";
+    private final List<Option> options;
 
     static class Option {
 
@@ -66,14 +68,13 @@ public class CommandLineOptions {
             return sb.toString();
         }
     }
-    private final List<Option> options;
 
     public CommandLineOptions() {
         options = new ArrayList<Option>();
         options.add(new Option('?', null, "Help"));
-        options.add(new Option('A', "ext:analyzer", "Files with the named extension should be analyzed with the specified class"));
+        options.add(new Option('A', ".ext|prefix.:analyzer", "Files with the named prefix/extension should be analyzed with the specified class"));
         options.add(new Option('a', ON_OFF, "Allow or disallow leading wildcards in a search"));
-        options.add(new Option('B', "url", "Base URL of the user Information provider. Default: \"http://www.opensolaris.org/viewProfile.jspa?username=\""));
+        options.add(new Option('B', "url", "Base URL of the user Information provider. Default: \"http://www.myserver.org/viewProfile.jspa?username=\""));
         options.add(new Option('C', null, "Print per project percentage progress information(I/O extensive, since one read through dir structure is made before indexing, needs -v, otherwise it just goes to the log)"));
         options.add(new Option('c', "/path/to/ctags", "Path to Exuberant Ctags from http://ctags.sf.net by default takes the Exuberant Ctags in PATH."));
         options.add(new Option('D', null, "Store history cache in a database (needs the JDBC driver in the classpath, typically derbyclient.jar or derby.jar)"));
@@ -89,14 +90,14 @@ public class CommandLineOptions {
         options.add(new Option('K', null, "List all repository pathes and exit."));
         options.add(new Option('L', "path", "Path to the subdirectory in the web-application containing the requested stylesheet. The following factory-defaults exist: \"default\", \"offwhite\" and \"polished\""));
         options.add(new Option('l', ON_OFF, "Turn on/off locking of the Lucene database during index generation"));
-        options.add(new Option('m', NUMBER, "The maximum words to index in a file"));
+        options.add(new Option('m', NUMBER, "Amount of memory that may be used for buffering added documents and deletions before they are flushed to the Directory(default "+Configuration.defaultRamBufferSize+"MB). Please increase JVM heap accordingly, too."));
         options.add(new Option('N', "/path/to/symlink", "Allow this symlink to be followed. Option may be repeated."));
         options.add(new Option('n', null, "Do not generate indexes, but process all other command line options"));
         options.add(new Option('O', ON_OFF, "Turn on/off the optimization of the index database as part of the indexing step"));
         options.add(new Option('o', "path", "File with extra command line options for ctags"));
         options.add(new Option('P', null, "Generate a project for each of the top-level directories in source root"));
         options.add(new Option('p', "/path/to/default/project", "This is the path to the project that should be selected by default in the web application(when no other project set either in cookie or in parameter). You should strip off the source root."));
-        options.add(new Option('Q', ON_OFF, "Turn on/off quick context scan. By default only the first 32k of a file is scanned, and a '[..all..]' link is inserted if the file is bigger. Activating this may slow the server down (Note: this is setting only affects the web application)"));
+        options.add(new Option('Q', ON_OFF, "Turn on/off quick context scan. By default only the first 1024k of a file is scanned, and a '[..all..]' link is inserted if the file is bigger. Activating this may slow the server down (Note: this is setting only affects the web application)"));
         options.add(new Option('q', null, "Run as quietly as possible"));
         options.add(new Option('R', "/path/to/configuration", "Read configuration from the specified file"));
         options.add(new Option('r', ON_OFF, "Turn on/off support for remote SCM systems"));
@@ -111,7 +112,7 @@ public class CommandLineOptions {
         options.add(new Option('W', "/path/to/configuration", "Write the current configuration to the specified file (so that the web application can use the same configuration"));
         options.add(new Option('w', "webapp-context", "Context of webapp. Default is /source. If you specify a different name, make sure to rename source.war to that name."));
         options.add(new Option('X', "url:suffix", "URL Suffix for the user Information provider. Default: \"\""));
-        options.add(new Option('z', NUMBER, "depth of scanning for repositories in directory structure relative to source root"));
+        options.add(new Option('z', NUMBER, "depth of scanning for repositories in directory structure relative to source root. Default is "+Configuration.defaultScanningDepth+" ."));
     }
 
     public String getCommandString() {

@@ -28,7 +28,6 @@ import java.util.Arrays;
 import org.apache.lucene.analysis.Tokenizer;
 import org.apache.lucene.analysis.tokenattributes.CharTermAttribute;
 import org.apache.lucene.analysis.tokenattributes.OffsetAttribute;
-import org.apache.lucene.analysis.tokenattributes.PositionIncrementAttribute;
 
 /**
  * Tokenizer for paths filenames and extensions Input:
@@ -108,7 +107,8 @@ public class PathTokenizer extends Tokenizer {
     }
 
     @Override
-    public final void end() {
+    public final void end() throws IOException {	
+	super.end();
         // set final offset
         int finalOffset = correctOffset(charsRead);
         offsetAtt.setOffset(finalOffset, finalOffset);
@@ -120,5 +120,10 @@ public class PathTokenizer extends Tokenizer {
         dot=false;
         charsRead = 0;
         startPosition = 0;
+    }
+    
+    @Override
+    public final void close() throws IOException {
+        super.close();
     }
 }

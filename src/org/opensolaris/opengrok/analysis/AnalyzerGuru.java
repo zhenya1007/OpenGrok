@@ -62,10 +62,12 @@ import org.opensolaris.opengrok.analysis.php.PhpAnalyzerFactory;
 import org.opensolaris.opengrok.analysis.plain.PlainAnalyzerFactory;
 import org.opensolaris.opengrok.analysis.plain.XMLAnalyzerFactory;
 import org.opensolaris.opengrok.analysis.python.PythonAnalyzerFactory;
+import org.opensolaris.opengrok.analysis.scala.ScalaAnalyzerFactory;
 import org.opensolaris.opengrok.analysis.sh.ShAnalyzerFactory;
 import org.opensolaris.opengrok.analysis.sql.PLSQLAnalyzerFactory;
 import org.opensolaris.opengrok.analysis.sql.SQLAnalyzerFactory;
 import org.opensolaris.opengrok.analysis.tcl.TclAnalyzerFactory;
+import org.opensolaris.opengrok.analysis.uue.UuencodeAnalyzerFactory;
 import org.opensolaris.opengrok.analysis.vb.VBAnalyzerFactory;
 import org.opensolaris.opengrok.configuration.Project;
 import org.opensolaris.opengrok.history.Annotation;
@@ -96,6 +98,10 @@ public class AnalyzerGuru {
     /** Map from file extensions to analyzer factories. */
     private static final Map<String, FileAnalyzerFactory>
         ext = new HashMap<>();
+
+    /** Map from file prefixes to analyzer factories. */
+    private static final Map<String, FileAnalyzerFactory>
+        pre = new HashMap<>();
 
     // @TODO: have a comparator
     /** Map from magic strings to analyzer factories. */
@@ -140,6 +146,7 @@ public class AnalyzerGuru {
             new CxxAnalyzerFactory(),
             new ShAnalyzerFactory(),
             PlainAnalyzerFactory.DEFAULT_INSTANCE,
+            new UuencodeAnalyzerFactory(),
             new GZIPAnalyzerFactory(),
             new JavaAnalyzerFactory(),
             new JavaScriptAnalyzerFactory(),
@@ -148,6 +155,7 @@ public class AnalyzerGuru {
             new PhpAnalyzerFactory(),
             new LispAnalyzerFactory(),
             new TclAnalyzerFactory(),
+            new ScalaAnalyzerFactory(),
             new SQLAnalyzerFactory(),
             new PLSQLAnalyzerFactory(),
             new FortranAnalyzerFactory(),
@@ -175,6 +183,11 @@ public class AnalyzerGuru {
             assert old == null :
                 "name '" + name + "' used in multiple analyzers";
         }
+        for (String prefix : factory.getPrefixes()) {
+            FileAnalyzerFactory old = pre.put(prefix, factory);
+            assert old == null :
+            "prefix '" + prefix + "' used in multiple analyzers";
+        }
         for (String suffix : factory.getSuffixes()) {
             FileAnalyzerFactory old = ext.put(suffix, factory);
             assert old == null :
@@ -187,6 +200,24 @@ public class AnalyzerGuru {
         }
         matchers.addAll(factory.getMatchers());
         factories.add(factory);
+    }
+
+   /**
+     *  Instruct the AnalyzerGuru to use a given analyzer for a given
+     *  file prefix.
+     *  @param prefix the file prefix to add
+     *  @param factory   a factory which creates
+     *                   the analyzer to use for the given extension
+     *                  (if you pass null as the analyzer, you will disable
+     *                   the analyzer used for that extension)
+     */
+    public static void addPrefix(String prefix,
+                                    FileAnalyzerFactory factory) {
+        if (factory == null) {
+            pre.remove(prefix);
+        } else {
+            pre.put(prefix, factory);
+        }
     }
 
     /**
@@ -276,6 +307,9 @@ public class AnalyzerGuru {
                     ));
             }                   
             fa.analyze(doc, StreamSource.fromFile(file), xrefOut);
+            
+            String type = fa.getFileTypeName();
+            doc.add(new StringField(QueryBuilder.TYPE, type, Store.YES));
         }
     }
 
@@ -440,19 +474,37 @@ public class AnalyzerGuru {
     public static FileAnalyzerFactory find(String file) {
         String path = file;
         int i;
-        if (((i = path.lastIndexOf('/')) > 0 || (i = path.lastIndexOf('\\')) > 0)
+
+        // Get basename of the file first.
+        if (((i = path.lastIndexOf(File.separatorChar)) > 0)
             && (i + 1 < path.length())) {
             path = path.substring(i + 1);
         }
+
         int dotpos = path.lastIndexOf('.');
         if (dotpos >= 0) {
-            FileAnalyzerFactory factory =
+            FileAnalyzerFactory factory;
+
+            // Try matching the prefix.
+            if (dotpos > 0) {
+                factory =
+                    pre.get(path.substring(0, dotpos).toUpperCase(Locale.getDefault()));
+                if (factory != null) {
+                    return factory;
+                }
+            }
+
+            // Now try matching the suffix. We kind of consider this order (first
+            // prefix then suffix) to be workable although for sure there can be
+            // cases when this does not work.
+            factory =
                 ext.get(path.substring(dotpos + 1).toUpperCase(Locale.getDefault()));
             if (factory != null) {
                 return factory;
             }
         }
-        // file doesn't have any of the extensions we know, try full match
+
+        // file doesn't have any of the prefix or extensions we know, try full match
         return FILE_NAMES.get(path.toUpperCase(Locale.getDefault()));
     }
 

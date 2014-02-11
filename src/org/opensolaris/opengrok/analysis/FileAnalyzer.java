@@ -125,9 +125,26 @@ public class FileAnalyzer extends Analyzer {
 
     /** Creates a new instance of FileAnalyzer */
     public FileAnalyzer(FileAnalyzerFactory factory) {
-        super(new Analyzer.PerFieldReuseStrategy());
+        super(Analyzer.PER_FIELD_REUSE_STRATEGY);
         this.factory = factory;        
                         
+    }
+    
+    /**
+     * Returns the normalized name of the analyzer,
+     * which should corresponds to the file type.
+     * Example: The analyzer for the C language (CAnalyzer) would return “c”.
+     * @return Normalized name of the analyzer.
+     */
+    public String getFileTypeName() {
+        String name = this.getClass().getSimpleName().toLowerCase();
+        String suffix = "analyzer";
+        
+        if (name.endsWith(suffix)) {
+            return name.substring(0, name.length() - suffix.length());
+        }
+        
+        return name.toLowerCase();
     }
 
     /**

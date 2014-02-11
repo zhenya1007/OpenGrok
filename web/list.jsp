@@ -77,7 +77,7 @@ document.pageReady.push(function() { pageReadyList();});
     File resourceFile = cfg.getResourceFile();
     String path = cfg.getPath();
     String basename = resourceFile.getName();
-    String rawPath = request.getContextPath() + Prefix.RAW_P + path;
+    String rawPath = request.getContextPath() + Prefix.DOWNLOAD_P + path;
     Reader r = null;
     if (cfg.isDir()) {
         // valid resource is requested
@@ -103,14 +103,16 @@ document.pageReady.push(function() { pageReadyList();});
         DirectoryListing dl = new DirectoryListing(cfg.getEftarReader());
         List<String> files = cfg.getResourceFileList();
         if (!files.isEmpty()) {
-            List<String> readMes = dl.listTo(resourceFile, out, path, files);
+            List<String> readMes = dl.listTo(
+                    Util.URIEncodePath(request.getContextPath()),
+                    resourceFile, out, path, files);
             File[] catfiles = cfg.findDataFiles(readMes);
             for (int i=0; i < catfiles.length; i++) {
                 if (catfiles[i] == null) {
                     continue;
                 }
 %><h3><%= readMes.get(i) %></h3>
-<div id="src">
+<div id="src<%=i%>">
     <pre><%
                 Util.dump(out, catfiles[i], catfiles[i].getName().endsWith(".gz"));
     %></pre>

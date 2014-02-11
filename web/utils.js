@@ -51,7 +51,7 @@ function resizeContent() {
 }
 
 function domReadyMast() {
-    var h = document.locHash;
+    var h = document.hash;
     if (!window.location.hash) {
         if (h != null && h != "null")  {
             window.location.hash=h
@@ -325,7 +325,7 @@ function add_highlight() {
 }
 
 function toggle_filelist() {
-    $("span").each(
+    $("div").each(
         function() {
             if (this.className == "filelist") {
                 this.setAttribute("style", "display: none;");
@@ -401,7 +401,7 @@ function invertAllProjects() {
     $("#project *").each(
         function() {
             if ($(this).attr("selected")) {
-                $(this).removeAttr("selected")
+                $(this).removeAttr("selected");
             } else {
                 $(this).attr("selected", "true");
             }
@@ -422,13 +422,7 @@ function clearSearchFrom() {
                 $(this).attr("value", "");            
         }
     );    
-    $("#project *").each(
-        function() {
-            if ($(this).attr("selected")) {
-                $(this).removeAttr("selected")
-            } 
-        }
-    );
+    $("#type :selected").removeAttr("selected");
 }
 
 function checkEnter(event) {

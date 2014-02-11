@@ -179,11 +179,26 @@ public class UtilTest {
         assertEquals("", Util.formQuoteEscape(null));
         assertEquals("abc", Util.formQuoteEscape("abc"));
         assertEquals("&quot;abc&quot;", Util.formQuoteEscape("\"abc\""));
+        assertEquals("&amp;aring;", Util.formQuoteEscape("&aring;"));
     }
 
     @Test
     public void diffline() {
         String[][] tests = {
+            {
+                "if (a < b && foo < bar && c > d)",
+                "if (a < b && foo > bar && c > d)",
+
+                "if (a &lt; b &amp;&amp; foo <span class=\"d\">&lt;</span> bar &amp;&amp; c &gt; d)",
+                "if (a &lt; b &amp;&amp; foo <span class=\"a\">&gt;</span> bar &amp;&amp; c &gt; d)"
+            },
+            {
+                "foo << 1",
+                "foo >> 1",
+
+                "foo <span class=\"d\">&lt;&lt;</span> 1",
+                "foo <span class=\"a\">&gt;&gt;</span> 1"
+            },
             {
                 "\"(ses_id, mer_id, pass_id, \" + refCol +\" , mer_ref, amnt, "
                 + "cur, ps_id, ret_url, d_req_time, d_req_mil, h_resp_time, "
@@ -193,35 +208,49 @@ public class UtilTest {
                 + "h_resp_time, h_resp_mil) \"",
 
                 "\"(ses_id, mer_id, pass_id, \" + refCol +\" , mer_ref, amnt, "
+                + "cur, ps_id, ret_url, d_req_time, d_req_mil, h_resp_time, "
+                + "h_resp_mil) \"",
+                "\"(ses_id, mer_id, pass_id, \" + refCol +\" , mer_ref, amnt, "
                 + "cur, ps_id, ret_url, <span class=\"a\">exp_url, "
                 + "</span>d_req_time, d_req_mil, h_resp_time, h_resp_mil) \""
             },
             {   
                 "\"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)\", values);",
                 "\"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)\", values);",
-                
+
+                "\"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)\", values);",
                 "\"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?<span "
                 + "class=\"a\">, ?</span>)\", values);"
             },
             {
                 "char    *config_list = NULL;",
                 "char    **config_list = NULL;",
-                
+
+                "char    *config_list = NULL;",
                 "char    *<span class=\"a\">*</span>config_list = NULL;"
+            },
+            {
+                "char    **config_list = NULL;",
+                "char    *config_list = NULL;",
+
+                "char    *<span class=\"d\">*</span>config_list = NULL;",
+                "char    *config_list = NULL;"
             },
             {
                 "* An error occured or there is non-numeric stuff at the end",
                 "* An error occurred or there is non-numeric stuff at the end",
-                
+
+                "* An error occured or there is non-numeric stuff at the end",
                 "* An error occur<span class=\"a\">r</span>ed or there is "
                 + "non-numeric stuff at the end"
             }
         };
         for (int i=0; i < tests.length; i++) {
-            String[] strings=Util.diffline(new StringBuilder(tests[i][0]),
+            String[] strings=Util.diffline(
+                new StringBuilder(tests[i][0]),
                 new StringBuilder(tests[i][1]));
-            assertEquals(""+ i + "," + 0, strings[0], tests[i][0]);
-            assertEquals(""+ i + "," + 1, strings[1], tests[i][2]);
+            assertEquals(""+ i + "," + 0, tests[i][2], strings[0]);
+            assertEquals(""+ i + "," + 1, tests[i][3], strings[1]);
         }
     }
 
@@ -244,6 +273,23 @@ public class UtilTest {
     public void jsStringLiteral() {
         assertEquals("\"abc\\n\\r\\\"\\\\\"",
                      Util.jsStringLiteral("abc\n\r\"\\"));
+    }
+
+    @Test
+    public void stripPathPrefix() {
+        assertEquals("/", Util.stripPathPrefix("/", "/"));
+        assertEquals("/abc", Util.stripPathPrefix("/abc", "/abc"));
+        assertEquals("/abc/", Util.stripPathPrefix("/abc", "/abc/"));
+        assertEquals("/abc", Util.stripPathPrefix("/abc/", "/abc"));
+        assertEquals("/abc/", Util.stripPathPrefix("/abc/", "/abc/"));
+        assertEquals("abc", Util.stripPathPrefix("/", "/abc"));
+        assertEquals("abc/def", Util.stripPathPrefix("/", "/abc/def"));
+        assertEquals("def", Util.stripPathPrefix("/abc", "/abc/def"));
+        assertEquals("def", Util.stripPathPrefix("/abc/", "/abc/def"));
+        assertEquals("/abcdef", Util.stripPathPrefix("/abc", "/abcdef"));
+        assertEquals("/abcdef", Util.stripPathPrefix("/abc/", "/abcdef"));
+        assertEquals("def/ghi", Util.stripPathPrefix("/abc", "/abc/def/ghi"));
+        assertEquals("def/ghi", Util.stripPathPrefix("/abc/", "/abc/def/ghi"));
     }
 }
 

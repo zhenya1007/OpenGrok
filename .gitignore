@@ -1,6 +1,7 @@
 *~
 nbproject/*~
 opengrok-web-nbproject/nbproject/*~
+opengrok-web-nbproject/nbproject/build-impl.xml~
 tags
 TAGS
 build
@@ -13,6 +14,7 @@ prj.el
 nbproject/private
 generatedsrc
 lib/JFlex.jar
+lib/jflex-*
 lib/findbugs
 findbugs
 manifest.mf
@@ -34,3 +36,4 @@ glassfish
 webrev
 opengrok-web-nbproject/nbproject/private/
 opengrok-web-nbproject/nbproject/genfiles.properties
+run_my.bat

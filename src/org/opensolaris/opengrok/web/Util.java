@@ -55,11 +55,16 @@ import org.opensolaris.opengrok.history.HistoryGuru;
  * Class for useful functions.
  */
 public final class Util {
+    private static final Charset UTF8 = Charset.forName("UTF-8");
+
+    private static final String SPAN_D = "<span class=\"d\">";
+    private static final String SPAN_A = "<span class=\"a\">";
+    private static final String SPAN_E = "</span>";
+    private static final int SPAN_LEN = SPAN_D.length() + SPAN_E.length();
+
     private Util() {
         // singleton
     }
-
-    private static final Charset UTF8 = Charset.forName("UTF-8");
 
     /**
      * Return a string which represents a <code>CharSequence</code> in HTML.
@@ -500,11 +505,11 @@ public final class Util {
             out.write("<span class=\"blame\">");
             if (enabled) {
                 out.write(anchorClassStart);
-                out.write("r\" href=\"" );
+                out.write("r\" href=\"");
                 out.write(URIEncode(annotation.getFilename()));
                 out.write("?a=true&amp;r=");
                 out.write(URIEncode(r));
-                String msg = annotation.getDesc(r);
+		String msg = annotation.getDesc(r);
                 if (msg != null) {
                     out.write("\" title=\"");
                     out.write(msg);
@@ -516,6 +521,18 @@ public final class Util {
             out.write(buf.toString());
             buf.setLength(0);
             if (enabled) {
+                RuntimeEnvironment env = RuntimeEnvironment.getInstance();
+
+                out.write(anchorEnd);
+
+                // Write link to search the revision.
+                out.write(anchorClassStart);
+                out.write("search\" href=\"" + env.getUrlPrefix() +
+                    "defs=&refs=&path=&hist=");
+                out.write(URIEncode(r));
+                out.write("&type=\" title=\"Search history for this changeset");
+                out.write(closeQuotedTag);
+                out.write("S");
                 out.write(anchorEnd);
             }
             String a = annotation.getAuthor(num);
@@ -568,6 +585,42 @@ public final class Util {
     }
 
     /**
+     * Write the 'H A D' links. This is used for search results and directory
+     * listings.
+     *
+     * @param out   writer for producing output
+     * @param ctxE  URI encoded prefix
+     * @param entry file/directory name to write
+     * @param is_dir is directory
+     * @throws IOException depends on the destination (<var>out</var>).
+     */
+    public static void writeHAD(Writer out, String ctxE, String entry,
+        boolean is_dir) throws IOException {
+
+        String histPrefixE = ctxE + Prefix.HIST_L;
+        String downloadPrefixE = ctxE + Prefix.DOWNLOAD_P;
+        String xrefPrefixE = ctxE + Prefix.XREF_P;
+
+        out.write("<td class=\"q\"><a href=\"");
+        out.write(histPrefixE);
+        out.write(entry);
+        out.write("\" title=\"History\">H</a>");
+
+        if (!is_dir) {
+            out.write(" <a href=\"");
+            out.write(xrefPrefixE);
+            out.write(entry);
+            out.write("?a=true\" title=\"Annotate\">A</a> ");
+            out.write("<a href=\"");
+            out.write(downloadPrefixE);
+            out.write(entry);
+            out.write("\" title=\"Download\">D</a>");
+        }
+
+        out.write("</td>");
+    }
+
+    /**
      * wrapper arround UTF-8 URL encoding of a string
      *
      * @param q     query to be encoded. If {@code null}, an empty string will
@@ -580,7 +633,8 @@ public final class Util {
             return q == null ? "" : URLEncoder.encode(q, "UTF-8");
         } catch (UnsupportedEncodingException e) {
             // Should not happen. UTF-8 must be supported by JVMs.
-            Logger.getLogger(EftarFileReader.class.getName()).log(Level.WARNING, "Failed to URL-encode UTF-8: ", e);            
+            Logger.getLogger(Util.class.getName()).log(
+                    Level.WARNING, "Failed to URL-encode UTF-8: ", e);
         }
         return null;
     }
@@ -649,8 +703,8 @@ public final class Util {
     }
 
     /**
-     * Replace all quote characters (ASCI 0x22) with the corresponding html
-     * entity (&amp;quot;).
+     * Escape a string for use as in an HTML attribute value. The returned
+     * value is not enclosed in double quotes. The caller needs to add those.
      * @param q string to escape.
      * @return an empty string if a parameter is {@code null}, the mangled
      *  string otherwise.
@@ -665,6 +719,8 @@ public final class Util {
             c = q.charAt(i);
             if (c == '"') {
                 sb.append("&quot;");
+            } else if (c == '&') {
+                sb.append("&amp;");
             } else {
                 sb.append(c);
             }
@@ -672,16 +728,11 @@ public final class Util {
         return sb.toString();
     }
 
-    private static final String SPAN_D = "<span class=\"d\">";
-    private static final String SPAN_A = "<span class=\"a\">";
-    private static final String SPAN_E = "</span>";
-    private static final int SPAN_LEN = SPAN_D.length() + SPAN_E.length();
-
     /**
      * Tag changes in the given <var>line1</var> and <var>line2</var>
      * for highlighting. Removed parts are tagged with CSS class {@code d},
      * new parts are tagged with CSS class {@code a} using a {@code span}
-     * element.
+     * element. The input parameters must not have any HTML escapes in them.
      *
      * @param line1 line of the original file
      * @param line2 line of the changed/new file
@@ -689,48 +740,45 @@ public final class Util {
      * @throws NullPointerException if one of the given parameters is {@code null}.
      */
     public static String[] diffline(StringBuilder line1, StringBuilder line2) {
-        int m = line1.length();
-        int n = line2.length();
-        if (n == 0 || m == 0) {
-            return new String[] {line1.toString(), line2.toString()};
-        }
-
-        int s = 0;
-        char[] csl1 = new char[m + SPAN_LEN];
-        line1.getChars(0, m--, csl1, 0);
-        char[] csl2 = new char[n + SPAN_LEN];
-        line2.getChars(0, n--, csl2, 0);
-        while (s <= m && s <= n && csl1[s] == csl2[s]) {
-            s++ ;
-        }
-        while (s <= m && s <= n && csl1[m] == csl2[n]) {
-            m-- ;
-            n-- ;
-        }
-
         String[] ret = new String[2];
+        int s = 0;
+        int m = line1.length() - 1;
+        int n = line2.length() - 1;
+        while (s <= m && s <= n && (line1.charAt(s) == line2.charAt(s))) {
+            s++;
+        }
+
+        while (s <= m && s <= n && (line1.charAt(m) == line2.charAt(n))) {
+            m--;
+            n--;
+        }
+
         // deleted
         if (s <= m) {
-            m++;
-            System.arraycopy(csl1, m, csl1, m + SPAN_LEN, line1.length() - m);
-            System.arraycopy(csl1, s, csl1, s + SPAN_D.length(), m - s);
-            SPAN_E.getChars(0, SPAN_E.length(), csl1, m + SPAN_D.length());
-            SPAN_D.getChars(0, SPAN_D.length(), csl1, s);
-            ret[0] = new String(csl1);
+            StringBuilder sb = new StringBuilder();
+            sb.append(Util.htmlize(line1.substring(0, s)));
+            sb.append(SPAN_D);
+            sb.append(Util.htmlize(line1.substring(s, m + 1)));
+            sb.append(SPAN_E);
+            sb.append(Util.htmlize(line1.substring(m + 1, line1.length())));
+            ret[0] = sb.toString();
         } else {
-            ret[0] = line1.toString();
+            ret[0] = line1.toString(); // no change
         }
+
         // added
         if (s <= n) {
-            n++;
-            System.arraycopy(csl2, n, csl2, n + SPAN_LEN, line2.length() - n);
-            System.arraycopy(csl2, s, csl2, s + SPAN_A.length(), n - s);
-            SPAN_E.getChars(0, SPAN_E.length(), csl2, n + SPAN_A.length());
-            SPAN_A.getChars(0, SPAN_A.length(), csl2, s);
-            ret[1] = new String(csl2);
+            StringBuilder sb = new StringBuilder();
+            sb.append(Util.htmlize(line2.substring(0, s)));
+            sb.append(SPAN_A);
+            sb.append(Util.htmlize(line2.substring(s, n + 1)));
+            sb.append(SPAN_E);
+            sb.append(Util.htmlize(line2.substring(n + 1, line2.length())));
+            ret[1] = sb.toString();
         } else {
-            ret[1] = line2.toString();
+            ret[1] = line2.toString(); // no change
         }
+
         return ret;
     }
 
@@ -764,7 +812,7 @@ public final class Util {
         out.append("<tr><td>Ignored files</td><td>");
         printUnorderedList(out, env.getIgnoredNames().getItems());
         out.append("</td></tr>");
-        printTableRow(out, "Index word limit", env.getIndexWordLimit());
+        printTableRow(out, "lucene RAM_BUFFER_SIZE_MB", env.getRamBufferSize());
         printTableRow(out, "Allow leading wildcard in search",
             env.isAllowLeadingWildcard());
         printTableRow(out, "History cache", HistoryGuru.getInstance()
@@ -919,5 +967,34 @@ public final class Util {
         }
         sb.append('"');
         return sb.toString();
+    }
+
+    /**
+     * Make a path relative by stripping off a prefix. If the path does not
+     * have the given prefix, return the full path unchanged.
+     *
+     * @param prefix the prefix to strip off
+     * @param fullPath the path from which to remove the prefix
+     * @return a path relative to {@code prefix} if {@code prefix} is a
+     *     parent directory of {@code fullPath}; otherwise, {@code fullPath}
+     */
+    public static String stripPathPrefix(String prefix, String fullPath) {
+        // Find the length of the prefix to strip off. The prefix should
+        // represent a directory, so it could end with a slash. In case it
+        // doesn't end with a slash, increase the length by one so that we
+        // strip off the leading slash from the relative path.
+        int prefixLength = prefix.length();
+        if (!prefix.endsWith("/")) {
+            prefixLength++;
+        }
+
+        // If the full path starts with the prefix, strip off the prefix.
+        if (fullPath.length() > prefixLength && fullPath.startsWith(prefix)
+                && fullPath.charAt(prefixLength - 1) == '/') {
+            return fullPath.substring(prefixLength);
+        }
+
+        // Otherwise, return the full path.
+        return fullPath;
     }
 }

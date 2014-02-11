@@ -18,11 +18,12 @@
  */
 
 /*
- * Copyright (c) 2010, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2010, 2014, Oracle and/or its affiliates. All rights reserved.
  */
 
 package org.opensolaris.opengrok.analysis;
 
+import java.io.IOException;
 import java.io.Reader;
 import java.io.StringReader;
 import org.apache.lucene.analysis.tokenattributes.OffsetAttribute;
@@ -37,8 +38,10 @@ import org.opensolaris.opengrok.analysis.lisp.LispSymbolTokenizer;
 import org.opensolaris.opengrok.analysis.perl.PerlSymbolTokenizer;
 import org.opensolaris.opengrok.analysis.plain.PlainFullTokenizer;
 import org.opensolaris.opengrok.analysis.plain.PlainSymbolTokenizer;
+import org.opensolaris.opengrok.analysis.scala.ScalaSymbolTokenizer;
 import org.opensolaris.opengrok.analysis.sh.ShSymbolTokenizer;
 import org.opensolaris.opengrok.analysis.tcl.TclSymbolTokenizer;
+import org.opensolaris.opengrok.analysis.uue.UuencodeFullTokenizer;
 import static org.junit.Assert.*;
 
 /**
@@ -61,6 +64,7 @@ public class JFlexTokenizerTest {
         testOffsetAttribute(CSymbolTokenizer.class);
         testOffsetAttribute(CxxSymbolTokenizer.class);
         testOffsetAttribute(JavaSymbolTokenizer.class);
+        testOffsetAttribute(ScalaSymbolTokenizer.class);
         testOffsetAttribute(LispSymbolTokenizer.class);
         testOffsetAttribute(TclSymbolTokenizer.class);
 
@@ -127,5 +131,26 @@ public class JFlexTokenizerTest {
         // variables.
         String[] expectedTokens = {"VARIABLE", "abc"};
         testOffsetAttribute(ShSymbolTokenizer.class, inputText, expectedTokens);
+    }
+
+    /**
+     * Truncated uuencoded files used to cause infinite loops. Verify that
+     * they work now.
+     */
+    @Test
+    public void truncatedUuencodedFile() throws IOException {
+        UuencodeFullTokenizer tokenizer = new UuencodeFullTokenizer(
+                new StringReader("begin 644 test\n"));
+        CharTermAttribute term = tokenizer.addAttribute(CharTermAttribute.class);
+
+        assertTrue(tokenizer.incrementToken());
+        assertEquals("begin", term.toString());
+        assertTrue(tokenizer.incrementToken());
+        assertEquals("644", term.toString());
+        assertTrue(tokenizer.incrementToken());
+        assertEquals("test", term.toString());
+
+        // This call used to hang forever.
+        assertFalse(tokenizer.incrementToken());
     }
 }

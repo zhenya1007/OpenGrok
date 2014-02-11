@@ -45,7 +45,7 @@ public class OCamlAnalyzerFactory extends FileAnalyzerFactory {
        "list of suffixes to list of analyzers, in priority order" as a [per-project] user option.*/
 
     public OCamlAnalyzerFactory() {
-        super(null, SUFFIXES, null, null, "text/plain", Genre.PLAIN);
+        super(null, null, SUFFIXES, null, null, "text/plain", Genre.PLAIN);
     }
 
     @Override

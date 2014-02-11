@@ -21,7 +21,6 @@
 package org.opensolaris.opengrok.search;
 
 import java.io.IOException;
-import java.io.StringReader;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -285,19 +284,22 @@ public class Summarizer {
         //FIXME somehow integrate below cycle to getSummary to save the cloning and memory,
         //also creating Tokens is suboptimal with 3.0.0 , this whole class could be replaced by highlighter
         ArrayList<Token> result = new ArrayList<Token>();
-        TokenStream ts = analyzer.tokenStream("full", new StringReader(text));
+        TokenStream ts = analyzer.tokenStream("full", text);        
         CharTermAttribute term = ts.addAttribute(CharTermAttribute.class);
-        OffsetAttribute offset = ts.addAttribute(OffsetAttribute.class);
+        OffsetAttribute offset = ts.addAttribute(OffsetAttribute.class);        
+        ts.reset();
         while(ts.incrementToken()) {
             Token t=new Token(term.buffer(),0,term.length(),offset.startOffset(),offset.endOffset());
             result.add(t);
         }
+        ts.end();
+        ts.close();        
         return result.toArray(new Token[result.size()]);
     }
 
 
     /**
-     * Get the terms from a query and adds them to hightlite
+     * Get the terms from a query and adds them to highlight
      * a stream of tokens
      *
      * @param query
